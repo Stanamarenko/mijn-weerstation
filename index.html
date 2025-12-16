@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Actuele Weerdata</title>
+    <style>
+        /* Basis Stijl */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; padding: 0; background-color: #f4f7f6; 
+            color: #333;
+        }
+        .container { 
+            max-width: 900px; margin: 40px auto; padding: 20px; 
+            background-color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            border-radius: 8px;
+        }
+        /* Navigatie Stijl */
+        nav { 
+            text-align: center; padding: 10px 0; margin-bottom: 20px; 
+            border-bottom: 1px solid #ddd;
+        }
+        nav a { 
+            text-decoration: none; color: #007bff; font-weight: 600; 
+            margin: 0 15px; font-size: 1.1em;
+        }
+        nav a:hover { color: #0056b3; }
+
+        /* Header Stijl */
+        h1 { 
+            font-size: 2.2em; border-bottom: 2px solid #007bff; 
+            padding-bottom: 5px; color: #007bff; 
+        }
+        #tijd { font-size: 0.9em; color: #666; margin-bottom: 20px; }
+
+        /* Hoofd Data Stijl */
+        .main-data { 
+            display: flex; align-items: center; margin-bottom: 30px; 
+            padding: 20px; border: 1px solid #eee; border-radius: 8px;
+        }
+        #temperatuur { 
+            font-size: 5em; font-weight: 700; color: #dc3545; 
+            line-height: 1; margin-right: 20px;
+        }
+        #conditie { 
+            font-size: 1.5em; font-weight: 500; 
+            color: #333; margin-top: 10px;
+        }
+
+        /* Detail Raster Stijl */
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .detail-card {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #007bff;
+        }
+        .detail-card strong {
+            display: block;
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 3px;
+        }
+        .detail-card span {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #333;
+        }
+    </style>
+    <script src="weather-logic.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <a href="index.html">Actueel</a> |
+            <a href="forecast-charts.html">Forecast Grafieken</a>
+        </nav>
+
+        <h1>Weer in <span id="stad">Laden...</span></h1>
+        <p id="tijd">Laatst bijgewerkt: --:--</p>
+        
+        <div class="main-data">
+            <div id="temperatuur">--°C</div>
+            <div id="conditie"></div>
+        </div>
+        
+        <h2>Details</h2>
+        <div id="details" class="details-grid">
+            
+            <div class="detail-card">
+                <strong>Gevoelstemperatuur</strong>
+                <span id="feels-like">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Minimum Temp.</strong>
+                <span id="temp-min">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Maximum Temp.</strong>
+                <span id="temp-max">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Wind</strong>
+                <span id="wind-info">-- Bft --</span>
+            </div>
+            <div class="detail-card">
+                <strong>Vochtigheid</strong>
+                <span id="humidity">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Druk</strong>
+                <span id="pressure">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Zichtbaarheid</strong>
+                <span id="visibility">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Zonsopkomst</strong>
+                <span id="sunrise">--</span>
+            </div>
+            <div class="detail-card">
+                <strong>Zonsondergang</strong>
+                <span id="sunset">--</span>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        async function updateCurrentDisplay() {
+            const data = await fetchCurrentData();
+            if (!data) return;
+
+            document.getElementById('stad').innerText = data.name;
+            document.getElementById('tijd').innerText = "Laatst bijgewerkt: " + new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+
+            document.getElementById('temperatuur').innerText = Math.round(data.main.temp) + "°C";
+            document.getElementById('conditie').innerText = toUpperFirst(data.weather[0].description);
+            
+            // NIEUWE DATA UIT Current Weather API:
+            document.getElementById('feels-like').innerText = Math.round(data.main.feels_like) + "°C";
+            document.getElementById('temp-min').innerText = Math.round(data.main.temp_min) + "°C";
+            document.getElementById('temp-max').innerText = Math.round(data.main.temp_max) + "°C";
+            document.getElementById('humidity').innerText = data.main.humidity + " %";
+            document.getElementById('pressure').innerText = Math.round(data.main.pressure) + " hPa";
+            // Zichtbaarheid is in meters, tonen in km
+            document.getElementById('visibility').innerText = (data.visibility / 1000).toFixed(1) + " km"; 
+            
+            document.getElementById('sunrise').innerText = formatTime(data.sys.sunrise);
+            document.getElementById('sunset').innerText = formatTime(data.sys.sunset);
+
+            const windBft = speedToBeaufort(data.wind.speed);
+            const windDir = degToDirection(data.wind.deg);
+            document.getElementById('wind-info').innerText = `${windBft} Bft ${windDir}`;
+        }
+
+        updateCurrentDisplay();
+        setInterval(updateCurrentDisplay, 3600000); 
+    </script>
+</body>
+</html>
