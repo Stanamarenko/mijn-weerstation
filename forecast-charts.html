@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Forecast Grafieken</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* Basis Stijl (Hetzelfde als index.html) */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; padding: 0; background-color: #f4f7f6; 
+            color: #333;
+        }
+        .container { 
+            max-width: 900px; margin: 40px auto; padding: 20px; 
+            background-color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            border-radius: 8px;
+        }
+        /* Navigatie Stijl */
+        nav { 
+            text-align: center; padding: 10px 0; margin-bottom: 20px; 
+            border-bottom: 1px solid #ddd;
+        }
+        nav a { 
+            text-decoration: none; color: #007bff; font-weight: 600; 
+            margin: 0 15px; font-size: 1.1em;
+        }
+        nav a:hover { color: #0056b3; }
+        
+        /* Grafiek Stijl */
+        h1 { 
+            font-size: 2.2em; border-bottom: 2px solid #007bff; 
+            padding-bottom: 5px; color: #007bff; 
+        }
+        p.info {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ffeeba;
+            font-size: 0.9em;
+        }
+        .chart-container { 
+            width: 100%; margin: 40px 0; padding: 15px;
+            background-color: #f8f9fa; border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .checkbox-grid {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .checkbox-grid label {
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+        }
+    </style>
+    <script src="weather-logic.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <a href="index.html">Actueel</a> |
+            <a href="forecast-charts.html">Forecast Grafieken</a>
+        </nav>
+
+        <h1>Weer Voorspelling (48 Uur)</h1>
+        <p class="info">
+            <strong>BELANGRIJK:</strong> Deze data is gebaseerd op intervallen van 3 uur (OpenWeatherMap gratis API).
+        </p>
+        
+        <h2>Selecteer Datasets</h2>
+        <div id="data-selector" class="checkbox-grid">
+            <label>
+                <input type="checkbox" name="data-set" value="temp" checked onchange="drawCombinedChart()">
+                Temperatuur (°C)
+            </label>
+            <label>
+                <input type="checkbox" name="data-set" value="feels_like" onchange="drawCombinedChart()">
+                Gevoelstemperatuur (°C)
+            </label>
+            <label>
+                <input type="checkbox" name="data-set" value="humidity" onchange="drawCombinedChart()">
+                Vochtigheid (%)
+            </label>
+            <label>
+                <input type="checkbox" name="data-set" value="pressure" onchange="drawCombinedChart()">
+                Druk (hPa)
+            </label>
+            <label>
+                <input type="checkbox" name="data-set" value="wind" onchange="drawCombinedChart()">
+                Wind (m/s)
+            </label>
+            <label>
+                <input type="checkbox" name="data-set" value="clouds" onchange="drawCombinedChart()">
+                Wolkenbedekking (%)
+            </label>
+        </div>
+
+
+        <div class="chart-container">
+            <canvas id="combinedChart"></canvas>
+            <p id="error-message" style="color: red; margin-top: 15px;"></p>
+        </div>
+    </div>
+
+    <script>
+        let weatherForecastData = null; 
+        let chartInstance = null; 
+
+        // Dataset Definities (AANGEPAST: Nieuwe datasets toegevoegd)
+        const DATASET_CONFIG = {
+            temp: {
+                label: 'Temperatuur (°C)',
+                dataKey: 'temp',
+                color: 'rgba(220, 53, 69, 1)',
+                backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                yAxisID: 'yTemp'
+            },
+            humidity: {
+                label: 'Vochtigheid (%)',
+                dataKey: 'humidity',
+                color: 'rgba(0, 123, 255, 1)',
+                backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                yAxisID: 'yHumidity'
+            },
+            pressure: {
+                label: 'Druk (hPa)',
+                dataKey: 'pressure',
+                color: 'rgba(40, 167, 69, 1)',
+                backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                yAxisID: 'yPressure'
+            },
+            wind: {
+                label: 'Wind (m/s)',
+                dataKey: 'wind_speed', 
+                color: 'rgba(255, 193, 7, 1)',
+                backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                yAxisID: 'yWind'
+            },
+            // NIEUW TOEGEVOEGD
+            feels_like: {
+                label: 'Gevoelstemperatuur (°C)',
+                dataKey: 'feels_like',
+                color: 'rgba(255, 99, 132, 1)', 
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                yAxisID: 'yTemp' // Deelt Y-as met temperatuur
+            },
+            clouds: {
+                label: 'Wolkenbedekking (%)',
+                dataKey: 'clouds',
+                color: 'rgba(108, 117, 125, 1)',
+                backgroundColor: 'rgba(108, 117, 125, 0.2)',
+                yAxisID: 'yClouds' // Nieuwe as
+            },
+            // EINDE NIEUW
+        };
+
+        // Functie om de grafiek te tekenen op basis van geselecteerde datasets
+        async function drawCombinedChart() {
+            document.getElementById('error-message').innerText = ""; 
+
+            // 1. DATA OPHALEN
+            if (!weatherForecastData) {
+                weatherForecastData = await fetchForecastData(); 
+            }
+            
+            if (!weatherForecastData || !weatherForecastData.hourly || weatherForecastData.hourly.length === 0) {
+                document.getElementById('error-message').innerText = "Fout bij ophalen data. Controleer de API sleutel, CITY_ID in weather-logic.js en de browserconsole (F12) voor details.";
+                return;
+            }
+
+            // 2. VORIGE GRAFIEK VERNIETIGEN
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const forecastPoints = Math.min(weatherForecastData.hourly.length, 40); 
+            const hourlyData = weatherForecastData.hourly.slice(0, forecastPoints); 
+            
+            const labels = hourlyData.map(item => formatTime(item.dt));
+            
+            // 3. GESELECTEERDE DATASETS BEPALEN
+            const selectedDatasets = Array.from(document.querySelectorAll('#data-selector input:checked'))
+                                          .map(checkbox => checkbox.value);
+            
+            if (selectedDatasets.length === 0) {
+                 document.getElementById('error-message').innerText = "Selecteer minstens één dataset om de grafiek te tekenen.";
+                 return;
+            }
+
+            // 4. DATASETS GENEREREN VOOR CHART.JS
+            const datasets = selectedDatasets.map(key => {
+                const config = DATASET_CONFIG[key];
+                return {
+                    label: config.label,
+                    data: hourlyData.map(item => {
+                        const value = item[config.dataKey];
+                        return (typeof value === 'number' && !isNaN(value)) ? value : null;
+                    }),
+                    borderColor: config.color,
+                    backgroundColor: config.backgroundColor,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    fill: false,
+                    yAxisID: config.yAxisID 
+                };
+            });
+
+            // 5. Y-ASSEN GENEREREN (AANGEPAST: Logica voor feels_like en clouds)
+            const scales = {
+                x: { title: { display: true, text: 'Tijdstip' } }
+            };
+            
+            let rightAxisCount = 0;
+
+            // Temperatuur en Gevoelstemperatuur (links)
+            if (selectedDatasets.includes('temp') || selectedDatasets.includes('feels_like')) {
+                scales.yTemp = { 
+                    type: 'linear', position: 'left', title: { display: true, text: 'Temperatuur (°C)' }
+                };
+            }
+            
+            // Druk (links of rechts)
+            if (selectedDatasets.includes('pressure')) {
+                const isLeft = !(selectedDatasets.includes('temp') || selectedDatasets.includes('feels_like'));
+                scales.yPressure = { 
+                    type: 'linear', 
+                    position: isLeft ? 'left' : 'right', 
+                    title: { display: true, text: 'Druk (hPa)' },
+                    offset: !isLeft && rightAxisCount > 0,
+                    grid: { drawOnChartArea: isLeft } 
+                };
+                if (!isLeft) rightAxisCount++;
+            }
+            
+            // Vochtigheid (rechts)
+            if (selectedDatasets.includes('humidity')) {
+                scales.yHumidity = { 
+                    type: 'linear', 
+                    position: 'right', 
+                    title: { display: true, text: 'Vochtigheid (%)' }, 
+                    offset: rightAxisCount > 0, 
+                    grid: { drawOnChartArea: false } 
+                };
+                rightAxisCount++;
+            }
+            
+            // Wind (rechts)
+            if (selectedDatasets.includes('wind')) {
+                scales.yWind = { 
+                    type: 'linear', 
+                    position: 'right', 
+                    title: { display: true, text: 'Wind (m/s)' }, 
+                    offset: rightAxisCount > 0,
+                    grid: { drawOnChartArea: false } 
+                };
+                rightAxisCount++;
+            }
+            
+            // Wolkenbedekking (rechts)
+            if (selectedDatasets.includes('clouds')) {
+                scales.yClouds = { 
+                    type: 'linear', 
+                    position: 'right', 
+                    title: { display: true, text: 'Wolken (%)' }, 
+                    min: 0, max: 100,
+                    offset: rightAxisCount > 0,
+                    grid: { drawOnChartArea: false } 
+                };
+                rightAxisCount++;
+            }
+
+
+            // 6. GRAFIEK TEKENEN
+            const ctx = document.getElementById('combinedChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: { 
+                        legend: { display: true, position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        // AANGEPAST: Tooltip voor Wolken toegevoegd
+                                        switch(context.dataset.yAxisID) {
+                                            case 'yTemp': 
+                                                label += Math.round(context.parsed.y) + ' °C'; 
+                                                break;
+                                            case 'yHumidity': 
+                                            case 'yClouds': // Gebruikt ook %
+                                                label += Math.round(context.parsed.y) + ' %'; 
+                                                break;
+                                            case 'yPressure': label += Math.round(context.parsed.y) + ' hPa'; break;
+                                            case 'yWind': label += context.parsed.y.toFixed(1) + ' m/s'; break;
+                                            default: label += context.parsed.y;
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: scales
+                }
+            });
+        }
+
+        // De aanroep robuuster maken door te wachten tot het DOM geladen is (Fix voor ReferenceError)
+        window.addEventListener('load', drawCombinedChart);
+    </script>
+</body>
+</html>
